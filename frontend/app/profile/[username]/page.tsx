@@ -126,7 +126,7 @@ export default function ProfilePage() {
             <div className="grid gap-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {data.archetype && <ArchetypeCard archetype={data.archetype} />}
-                <DNAFingerprint scores={data.dna_scores} />
+                {data.dna_scores && <DNAFingerprint scores={data.dna_scores} />}
               </div>
               <div className="grid md:grid-cols-2 gap-6">
                 <LanguageChart repos={data.repos || []} />
