@@ -46,3 +46,4 @@ services:
     name: devdna-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []  # allow all — fine for internal service communication
