@@ -20,6 +20,7 @@ build/
 # Logs
 *.log
 npm-debug.log*
+logs/
 
 # Docker
 nginx/certs/

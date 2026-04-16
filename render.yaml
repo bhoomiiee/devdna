@@ -1,0 +1,48 @@
+services:
+  # Backend API
+  - type: web
+    name: devdna-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: GROQ_API_KEY
+        sync: false  # set manually in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: devdna-redis
+          type: redis
+          property: connectionString
+    healthCheckPath: /health
+
+  # Frontend
+  - type: web
+    name: devdna-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: node .next/standalone/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: devdna-backend
+          type: web
+          property: host
+          transform: "https://{value}"
+
+  # Redis
+  - type: redis
+    name: devdna-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
