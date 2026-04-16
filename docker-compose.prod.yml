@@ -1,0 +1,26 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: devdna-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  backend:
+    ports: []  # remove direct port exposure in prod
+    expose:
+      - "4000"
+
+  frontend:
+    ports: []  # remove direct port exposure in prod
+    expose:
+      - "3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=https://api.devdna.app
