@@ -125,7 +125,7 @@ export default function ProfilePage() {
           {activeTab === "overview" && (
             <div className="grid gap-6">
               <div className="grid md:grid-cols-2 gap-6">
-                <ArchetypeCard archetype={data.archetype} />
+                {data.archetype && <ArchetypeCard archetype={data.archetype} />}
                 <DNAFingerprint scores={data.dna_scores} />
               </div>
               <div className="grid md:grid-cols-2 gap-6">
