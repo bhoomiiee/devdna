@@ -16,10 +16,18 @@ const PORT = process.env.PORT || 4000;
 // Security headers
 app.use(helmet());
 
+// CORS — allow Vercel frontend
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://devdna-one.vercel.app",
+    /\.vercel\.app$/,  // allow all Vercel preview deployments
+  ],
+  credentials: true,
+}));
+
 // Request logging
 app.use(morgan("combined", { stream: { write: (msg) => logger.info(msg.trim()) } }));
-
-app.use(cors());
 app.use(express.json({ limit: "10kb" })); // limit payload size
 
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
