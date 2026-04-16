@@ -6,6 +6,7 @@
 
 export default function GapAnalysis({ gaps }: { gaps: GapItem[] }) {
   // Gap Analysis Component
+  if (!gaps?.length) return null;
   return (
     <div className="bg-card rounded-2xl p-6 border border-white/10">
       <h3 className="text-slate-400 text-sm mb-4 uppercase tracking-widest">AI Gap Analysis</h3>

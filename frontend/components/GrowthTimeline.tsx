@@ -12,6 +12,7 @@ interface GrowthTimelineProps {
 
 export default function GrowthTimeline({ narrative, milestones }: GrowthTimelineProps) {
   // Growth Trajectory Component
+  if (!narrative && !milestones?.length) return null;
   return (
     <div className="bg-card rounded-2xl p-6 border border-white/10">
       <h3 className="text-slate-400 text-sm mb-4 uppercase tracking-widest">Growth Trajectory</h3>

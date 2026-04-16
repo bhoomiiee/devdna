@@ -162,7 +162,7 @@ export default function ProfilePage() {
           {activeTab === "career" && (
             <div className="grid gap-6">
               <RoleSimulation username={username} data={data} />
-              <GrowthTimeline narrative={data.growth_narrative} milestones={data.milestones} />
+              {data.growth_narrative && data.milestones && <GrowthTimeline narrative={data.growth_narrative} milestones={data.milestones} />}
               <OpenSourceMatcher opportunities={data.opportunities || []} />
             </div>
           )}

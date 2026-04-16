@@ -266,19 +266,22 @@ app.get("/api/analyze/:username", async (req, res) => {
     const topSkills = computeTopSkills(repos);
     const roleFit = computeRoleFit(repos, topSkills);
 
+    // Default DNA scores for empty profiles
+    const safeDnaScores = repos.length === 0 ? {
+      commit_consistency: 0, language_diversity: 0,
+      project_complexity: 0, documentation_quality: 0, collaboration_score: 0,
+    } : dnaScores;
+
     // Single Groq call for everything
     let ai;
     if (repos.length === 0) {
-      // No repos — return minimal data, skip AI
       ai = {
-        archetype: { type: "New Developer", emoji: "🌱", description: `${username} has no public repositories yet. Their GitHub journey is just beginning.` },
+        archetype: { type: "New Developer", emoji: "🌱", description: `${username} has no public repositories yet.` },
         growth_narrative: `${username} has just joined GitHub and hasn't published any public repositories yet.`,
-        gap_analysis: [
-          { skill: "First Project", suggestion: "Create your first public repository and push some code.", resources: ["github.com/new", "docs.github.com"] },
-        ],
-        recruiter_summary: `${username} has no public repositories. Insufficient data for a full assessment.`,
+        gap_analysis: [{ skill: "First Project", suggestion: "Create your first public repository.", resources: ["github.com/new"] }],
+        recruiter_summary: `${username} has no public repositories. Insufficient data for assessment.`,
         project_detection: { summary: "No repositories found", real_projects: [], tutorial_projects: [], production_score: 0 },
-        interview_readiness: { overall_score: 0, categories: { projects: { score: 0, note: "No public projects" }, code_quality: { score: 0, note: "No code to review" }, consistency: { score: 0, note: "No commit history" }, collaboration: { score: 0, note: "No activity" }, documentation: { score: 0, note: "No repos" } }, verdict: "Insufficient data for assessment.", top_tip: "Start by creating and pushing your first project to GitHub." },
+        interview_readiness: { overall_score: 0, categories: { projects: { score: 0, note: "No public projects" }, code_quality: { score: 0, note: "No code to review" }, consistency: { score: 0, note: "No commit history" }, collaboration: { score: 0, note: "No activity" }, documentation: { score: 0, note: "No repos" } }, verdict: "Insufficient data.", top_tip: "Start by creating your first project on GitHub." },
         opportunities: [],
       };
     } else {
@@ -319,8 +322,8 @@ app.get("/api/analyze/:username", async (req, res) => {
       following: user.following,
       streak_days: streakDays,
       top_skills: topSkills,
-      archetype: ai.archetype,
-      dna_scores: dnaScores,
+      archetype: ai.archetype || { type: "Unknown", emoji: "🧬", description: "" },
+      dna_scores: safeDnaScores,
       growth_narrative: ai.growth_narrative,
       milestones,
       gap_analysis: ai.gap_analysis,
