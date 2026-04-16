@@ -1,16 +1,26 @@
 const { getDemoProfile } = require("./demo");
+const { initRedis, getCache, setCache, getCacheSize } = require("./cache");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const Groq = require("groq-sdk");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const logger = require("./logger");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Security headers
+app.use(helmet());
+
+// Request logging
+app.use(morgan("combined", { stream: { write: (msg) => logger.info(msg.trim()) } }));
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10kb" })); // limit payload size
 
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 const gemini = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
@@ -18,19 +28,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 console.log(`AI Provider: ${groq ? "Groq ✓" : ""}${gemini ? " Gemini ✓" : ""}${!groq && !gemini ? "NONE — set GROQ_API_KEY or GEMINI_API_KEY" : ""}`);
 
-// ── In-memory cache (5 min TTL) ───────────────────────────────────────────
-const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000;
-
-function getCache(key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(key); return null; }
-  return entry.data;
-}
-function setCache(key, data) {
-  cache.set(key, { data, ts: Date.now() });
-}
+// ── In-memory cache replaced by Redis (see cache.js) ─────────────────────
 
 // ── AI call — tries Groq first, falls back to Gemini immediately ──────────
 async function aiCall(messages, maxTokens = 1200) {
@@ -47,7 +45,8 @@ async function aiCall(messages, maxTokens = 1200) {
     } catch (err) {
       const isRateLimit = err?.status === 429 || err?.message?.toLowerCase().includes("rate limit")
         || err?.message?.toLowerCase().includes("rate_limit");
-      if (isRateLimit) {
+      const isAuthError = err?.status === 401;
+      if (isRateLimit || isAuthError) {
         console.log("Groq rate limited → switching to Gemini");
         // fall through to Gemini below
       } else {
@@ -231,7 +230,14 @@ Respond ONLY with this exact JSON structure:
 
 // ── Main analyze route ─────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    cache_size: getCacheSize(),
+    ai_provider: groq ? "groq+gemini" : gemini ? "gemini" : "demo",
+  });
 });
 
 app.get("/api/analyze/:username", async (req, res) => {
@@ -449,4 +455,20 @@ Question: ${question}`;
   }
 });
 
-app.listen(PORT, () => console.log(`DevDNA backend running on http://localhost:${PORT}`));
+app.get("/metrics", (req, res) => {
+  res.json({
+    uptime_seconds: Math.floor(process.uptime()),
+    memory_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    cache_entries: cache.size,
+    node_version: process.version,
+    environment: process.env.NODE_ENV || "development",
+  });
+});
+
+// ── Start server ───────────────────────────────────────────────────────────
+async function start() {
+  await initRedis();
+  app.listen(PORT, () => logger.info(`DevDNA backend running on http://localhost:${PORT}`));
+}
+
+start();
