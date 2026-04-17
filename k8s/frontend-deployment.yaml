@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devdna-frontend
+  namespace: devdna
+  labels:
+    app: devdna-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devdna-frontend
+  template:
+    metadata:
+      labels:
+        app: devdna-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/bhoomiiee/devdna-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.devdna.app"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devdna-frontend
+  namespace: devdna
+spec:
+  selector:
+    app: devdna-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP

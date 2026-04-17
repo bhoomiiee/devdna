@@ -1,5 +1,9 @@
 const { getDemoProfile } = require("./demo");
 const { initRedis, getCache, setCache, getCacheSize } = require("./cache");
+const { register, login, authMiddleware } = require("./auth");
+const { createTask, getTask, getUserTasks, addSSEClient, removeSSEClient } = require("./tasks");
+const { enqueue } = require("./worker");
+const { setProviders } = require("./aiHelpers");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -34,7 +38,24 @@ const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_
 const gemini = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-console.log(`AI Provider: ${groq ? "Groq ✓" : ""}${gemini ? " Gemini ✓" : ""}${!groq && !gemini ? "NONE — set GROQ_API_KEY or GEMINI_API_KEY" : ""}`);
+// Share AI providers with worker
+setProviders(groq, gemini);
+
+logger.info(`AI Provider: ${groq ? "Groq ✓" : ""}${gemini ? " Gemini ✓" : ""}${!groq && !gemini ? "NONE" : ""}`);
+
+const rateLimit = require("express-rate-limit");
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests, please try again later." },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many auth attempts." },
+});
 
 // ── In-memory cache replaced by Redis (see cache.js) ─────────────────────
 
@@ -473,6 +494,80 @@ app.get("/metrics", (req, res) => {
     cache_entries: cache.size,
     node_version: process.version,
     environment: process.env.NODE_ENV || "development",
+  });
+});
+
+// ── Auth routes ────────────────────────────────────────────────────────────
+app.post("/api/auth/register", authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    const user = await register(email, password);
+    res.status(201).json({ message: "User created", user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/auth/login", authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    const result = await login(email, password);
+    res.json(result);
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+app.get("/api/auth/me", authMiddleware, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// ── Task routes ────────────────────────────────────────────────────────────
+app.post("/api/tasks", authMiddleware, apiLimiter, (req, res) => {
+  try {
+    const { operation, input } = req.body;
+    if (!operation || !input) return res.status(400).json({ error: "operation and input required" });
+    const task = createTask(req.user.id, operation, input);
+    enqueue(task.id);
+    res.status(201).json(task);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/tasks", authMiddleware, (req, res) => {
+  const tasks = getUserTasks(req.user.id);
+  res.json(tasks);
+});
+
+app.get("/api/tasks/:id", authMiddleware, (req, res) => {
+  const task = getTask(req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  if (task.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+  res.json(task);
+});
+
+// SSE — real-time task status
+app.get("/api/tasks/:id/stream", authMiddleware, (req, res) => {
+  const task = getTask(req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  if (task.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  // Send current state immediately
+  res.write(`data: ${JSON.stringify(task)}\n\n`);
+
+  addSSEClient(req.params.id, res);
+
+  req.on("close", () => {
+    removeSSEClient(req.params.id, res);
   });
 });
 
