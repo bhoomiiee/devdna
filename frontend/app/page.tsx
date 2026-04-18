@@ -61,9 +61,6 @@ export default function Home() {
         <a href="/compare" className="block text-center text-slate-500 hover:text-slate-300 text-sm mt-4 transition-colors">
           ⚔️ Compare two developers
         </a>
-        <a href="/tasks" className="block text-center text-slate-500 hover:text-slate-300 text-sm mt-2 transition-colors">
-          ⚡ AI Task Runner
-        </a>
       </div>
 
       <div className="mt-6 flex items-center gap-2 flex-wrap justify-center">
