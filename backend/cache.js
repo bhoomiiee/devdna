@@ -37,7 +37,10 @@ async function getCache(key) {
   try {
     if (redisClient && redisClient.status === "ready") {
       const val = await redisClient.get(key);
-      return val ? JSON.parse(val) : null;
+      if (!val || val === "null" || val === "{}") return null;
+      const parsed = JSON.parse(val);
+      if (!parsed || typeof parsed !== "object" || Object.keys(parsed).length === 0) return null;
+      return parsed;
     }
   } catch (err) {
     logger.warn(`Redis get failed: ${err.message}`);
@@ -45,6 +48,7 @@ async function getCache(key) {
   const entry = memoryCache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.ts > CACHE_TTL * 1000) { memoryCache.delete(key); return null; }
+  if (!entry.data || Object.keys(entry.data).length === 0) return null;
   return entry.data;
 }
 
