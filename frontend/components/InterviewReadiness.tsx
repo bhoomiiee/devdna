@@ -21,7 +21,7 @@ export default function InterviewReadiness({ data }: InterviewReadinessProps) {
       <h3 className="text-slate-400 text-sm mb-4 uppercase tracking-widest">Interview Readiness</h3>
 
       <div className="flex items-center gap-4 mb-6">
-        <div className={`text-6xl font-bold ${scoreColor}`}>{score}</div>
+        <div className={`text-6xl font-bold ${scoreColor}`}>{score}%</div>
         <div>
           <div className="w-32 h-2 bg-surface rounded-full overflow-hidden mb-2">
             <div className={`h-full ${barColor} rounded-full`} style={{ width: `${score}%` }} />

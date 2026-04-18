@@ -27,7 +27,7 @@ export default function ProjectDetection({ data }: ProjectDetectionProps) {
               strokeDasharray={`${score} ${100 - score}`} strokeLinecap="round" />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">{score}</span>
+            <span className="text-white font-bold text-lg">{score}%</span>
           </div>
         </div>
         <div>

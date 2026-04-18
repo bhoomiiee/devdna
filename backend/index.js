@@ -230,16 +230,16 @@ Respond ONLY with this exact JSON structure:
     "summary": "X out of Y projects show production-level complexity",
     "real_projects": [{ "name": "name", "reason": "why real", "complexity": "high|medium|low" }],
     "tutorial_projects": [{ "name": "name", "reason": "why tutorial" }],
-    "production_score": 0
+    "production_score": <integer 0-100, e.g. 45>
   },
   "interview_readiness": {
-    "overall_score": 0,
+    "overall_score": <integer 0-100, e.g. 65>,
     "categories": {
-      "projects": { "score": 0, "note": "note" },
-      "code_quality": { "score": 0, "note": "note" },
-      "consistency": { "score": 0, "note": "note" },
-      "collaboration": { "score": 0, "note": "note" },
-      "documentation": { "score": 0, "note": "note" }
+      "projects": { "score": <integer 0-100>, "note": "note" },
+      "code_quality": { "score": <integer 0-100>, "note": "note" },
+      "consistency": { "score": <integer 0-100>, "note": "note" },
+      "collaboration": { "score": <integer 0-100>, "note": "note" },
+      "documentation": { "score": <integer 0-100>, "note": "note" }
     },
     "verdict": "1-2 sentence verdict",
     "top_tip": "most impactful improvement tip"
