@@ -272,7 +272,7 @@ app.get("/health", (req, res) => {
 app.get("/api/analyze/:username", async (req, res) => {
   try {
     const { username } = req.params;
-    const cached = getCache(`analyze:${username}`);
+    const cached = await getCache(`analyze:${username}`);
     if (cached) return res.json(cached);
 
     const events = await fetchEvents(username);
@@ -334,7 +334,7 @@ app.get("/api/analyze/:username", async (req, res) => {
           demo.role_fit = roleFit;
           demo.commit_events = commitEvents;
           demo.repos = repos.slice(0, 30).map((r) => ({ name: r.name, language: r.language, stars: r.stargazers_count, forks: r.forks_count, description: r.description, url: r.html_url, size: r.size }));
-          setCache(`analyze:${username}`, demo);
+          await setCache(`analyze:${username}`, demo);
           return res.json(demo);
         }
         throw err;
@@ -368,7 +368,7 @@ app.get("/api/analyze/:username", async (req, res) => {
       })),
     };
 
-    setCache(`analyze:${username}`, result);
+    await setCache(`analyze:${username}`, result);
     res.json(result);
   } catch (err) {
     console.error(err);
@@ -381,7 +381,7 @@ app.get("/api/compare/:user1/:user2", async (req, res) => {
   try {
     const { user1, user2 } = req.params;
     const cacheKey = `compare:${user1}:${user2}`;
-    const cached = getCache(cacheKey);
+    const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
     const [u1, r1, u2, r2] = await Promise.all([fetchUser(user1), fetchRepos(user1), fetchUser(user2), fetchRepos(user2)]);
@@ -408,7 +408,7 @@ Dev2: ${user2} | Skills: ${skills2.join(", ")} | DNA: ${JSON.stringify(dna2)} | 
       user2: { username: user2, avatar: u2.avatar_url, name: u2.name, dna: dna2, fit: fit2, skills: skills2 },
       ...ai,
     };
-    setCache(cacheKey, result);
+    await setCache(cacheKey, result);
     res.json(result);
   } catch (err) {
     console.error(err);
