@@ -1,10 +1,10 @@
-const { createClient } = require("redis");
+const Redis = require("ioredis");
 const logger = require("./logger");
 
 const CACHE_TTL = 5 * 60; // 5 minutes in seconds
 
 let redisClient = null;
-const memoryCache = new Map(); // fallback if Redis unavailable
+const memoryCache = new Map();
 
 async function initRedis() {
   if (!process.env.REDIS_URL) {
@@ -12,26 +12,36 @@ async function initRedis() {
     return;
   }
   try {
-    redisClient = createClient({ url: process.env.REDIS_URL });
-    redisClient.on("error", (err) => logger.error(`Redis error: ${err.message}`));
+    redisClient = new Redis(process.env.REDIS_URL, {
+      tls: process.env.REDIS_URL.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: false,
+      lazyConnect: true,
+      connectTimeout: 5000,
+    });
+
+    redisClient.on("error", (err) => {
+      logger.warn(`Redis error: ${err.message} — using memory cache`);
+    });
+
     await redisClient.connect();
-    logger.info("Redis connected");
+    await redisClient.ping();
+    logger.info("Redis (Upstash) connected");
   } catch (err) {
-    logger.warn(`Redis connection failed, falling back to memory cache: ${err.message}`);
+    logger.warn(`Redis connection failed, using in-memory cache: ${err.message}`);
     redisClient = null;
   }
 }
 
 async function getCache(key) {
   try {
-    if (redisClient?.isReady) {
+    if (redisClient && redisClient.status === "ready") {
       const val = await redisClient.get(key);
       return val ? JSON.parse(val) : null;
     }
   } catch (err) {
     logger.warn(`Redis get failed: ${err.message}`);
   }
-  // fallback to memory
   const entry = memoryCache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.ts > CACHE_TTL * 1000) { memoryCache.delete(key); return null; }
@@ -40,19 +50,18 @@ async function getCache(key) {
 
 async function setCache(key, data) {
   try {
-    if (redisClient?.isReady) {
-      await redisClient.setEx(key, CACHE_TTL, JSON.stringify(data));
+    if (redisClient && redisClient.status === "ready") {
+      await redisClient.setex(key, CACHE_TTL, JSON.stringify(data));
       return;
     }
   } catch (err) {
     logger.warn(`Redis set failed: ${err.message}`);
   }
-  // fallback to memory
   memoryCache.set(key, { data, ts: Date.now() });
 }
 
 function getCacheSize() {
-  return redisClient?.isReady ? "redis" : memoryCache.size;
+  return redisClient?.status === "ready" ? "redis" : memoryCache.size;
 }
 
 module.exports = { initRedis, getCache, setCache, getCacheSize };
