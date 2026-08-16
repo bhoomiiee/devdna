@@ -1,15 +1,169 @@
+/* ── Fonts ─────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
+
+@font-face {
+  font-family: "Ogg Medium";
+  src: url("https://dcym8fthxf5uu.cloudfront.net/fonts/247a073c-29f5-4a89-aa3a-741020f346fc/OggText-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Tailwind ──────────────────────────────────────────────────────────────── */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-* { box-sizing: border-box; }
-
-body {
-  background-color: #0F0F1A;
-  color: #e2e8f0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --ink:    #111411;
+  --paper:  #fdf1e1;
+  --sky:    #4ab5e0;
+  --sky-dim: rgba(74, 181, 224, 0.14);
+  --shadow: rgba(0, 0, 0, 0.36);
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0F0F1A; }
-::-webkit-scrollbar-thumb { background: #2d2d4e; border-radius: 3px; }
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html {
+  min-height: 100%;
+  background: #0b1110;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: #0b1110;
+  color: #fdf1e1;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(74, 181, 224, 0.28);
+  color: #fdf1e1;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0b1110; }
+::-webkit-scrollbar-thumb { background: rgba(74, 181, 224, 0.22); border-radius: 99px; }
+
+/* ── Typography helper ─────────────────────────────────────────────────────── */
+.ogg {
+  font-family: "Ogg Medium", "Playfair Display", Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────────── */
+.dna-card {
+  background: #111d1b;
+  border: 1px solid rgba(74, 181, 224, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.dna-card:hover {
+  border-color: rgba(74, 181, 224, 0.22);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3), 0 0 32px rgba(74, 181, 224, 0.06);
+}
+
+/* ── Pill tag (cream) ──────────────────────────────────────────────────────── */
+.dna-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 16px;
+  background: #fdf1e1;
+  color: #111411;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* ── Primary button ────────────────────────────────────────────────────────── */
+.dna-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 0 30px;
+  background: #4ab5e0;
+  color: #0b1110;
+  border: none;
+  border-radius: 999px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(74, 181, 224, 0.3);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  text-decoration: none;
+}
+.dna-btn-primary:hover:not(:disabled) {
+  background: #63c3eb;
+  box-shadow: 0 12px 36px rgba(74, 181, 224, 0.4);
+  transform: translateY(-1px);
+}
+.dna-btn-primary:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Ghost button ──────────────────────────────────────────────────────────── */
+.dna-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 20px;
+  background: transparent;
+  color: rgba(253, 241, 225, 0.65);
+  border: 1px solid rgba(253, 241, 225, 0.18);
+  border-radius: 999px;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  text-decoration: none;
+}
+.dna-btn-ghost:hover {
+  border-color: rgba(74, 181, 224, 0.5);
+  color: #fdf1e1;
+  background: rgba(74, 181, 224, 0.06);
+}
+
+/* ── Input ─────────────────────────────────────────────────────────────────── */
+.dna-input {
+  width: 100%;
+  background: rgba(11, 17, 16, 0.8);
+  border: 1px solid rgba(74, 181, 224, 0.16);
+  border-radius: 14px;
+  padding: 14px 18px;
+  color: #fdf1e1;
+  font-family: inherit;
+  font-size: 0.97rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.dna-input::placeholder { color: rgba(253, 241, 225, 0.28); }
+.dna-input:focus { border-color: rgba(74, 181, 224, 0.55); }
+
+/* ── Orb (ambient glow) ────────────────────────────────────────────────────── */
+.dna-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}

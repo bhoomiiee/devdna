@@ -129,15 +129,7 @@ async function fetchRepos(username) {
   return res.data;
 }
 
-async function fetchEvents(username) {
-  try {
-    const res = await axios.get(
-      `https://api.github.com/users/${username}/events/public?per_page=100`,
-      { headers: githubHeaders() }
-    );
-    return res.data;
-  } catch { return []; }
-}
+const { fetchYearCommitActivity } = require("./githubHelpers");
 
 // ── Computed metrics ───────────────────────────────────────────────────────
 function computeDNAScores(repos) {
@@ -275,25 +267,19 @@ app.get("/api/analyze/:username", async (req, res) => {
     const cached = await getCache(`analyze:${username}`);
     if (cached) return res.json(cached);
 
-    const events = await fetchEvents(username);
     const [user, repos] = await Promise.all([fetchUser(username), fetchRepos(username)]);
 
-    // Streak from events
-    const pushDays = new Set(events.filter((e) => e.type === "PushEvent").map((e) => e.created_at.slice(0, 10)));
-    const streakDays = pushDays.size;
+    // Full-year commit heatmap from repo stats (52 weeks)
+    const commitEvents = await fetchYearCommitActivity(username, repos);
 
-    // Commit heatmap
-    const countByDay = {};
-    events.filter((e) => e.type === "PushEvent").forEach((e) => {
-      const day = e.created_at.slice(0, 10);
-      countByDay[day] = (countByDay[day] || 0) + (e.payload?.commits?.length || 1);
-    });
-    const commitEvents = Object.entries(countByDay).map(([date, count]) => ({ date, count }));
+    // Streak = number of distinct days with at least 1 commit in the past year
+    const streakDays = commitEvents.length;
 
     const dnaScores = computeDNAScores(repos);
     const milestones = computeMilestones(repos);
     const topSkills = computeTopSkills(repos);
     const roleFit = computeRoleFit(repos, topSkills);
+    const skillDecay = computeSkillDecay(repos);
 
     // Default DNA scores for empty profiles
     const safeDnaScores = repos.length === 0 ? {
@@ -333,6 +319,7 @@ app.get("/api/analyze/:username", async (req, res) => {
           demo.milestones = milestones;
           demo.role_fit = roleFit;
           demo.commit_events = commitEvents;
+          demo.skill_decay = skillDecay;
           demo.repos = repos.slice(0, 30).map((r) => ({ name: r.name, language: r.language, stars: r.stargazers_count, forks: r.forks_count, description: r.description, url: r.html_url, size: r.size }));
           await setCache(`analyze:${username}`, demo);
           return res.json(demo);
@@ -362,6 +349,7 @@ app.get("/api/analyze/:username", async (req, res) => {
       interview_readiness: ai.interview_readiness,
       opportunities: ai.opportunities,
       commit_events: commitEvents,
+      skill_decay: skillDecay,
       repos: repos.slice(0, 30).map((r) => ({
         name: r.name, language: r.language, stars: r.stargazers_count,
         forks: r.forks_count, description: r.description, url: r.html_url, size: r.size,
@@ -461,6 +449,347 @@ Respond ONLY with valid JSON:
 
     const raw = await groqCall([{ role: "user", content: prompt }], 500);
     res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Skill decay (pure computation, no AI) ─────────────────────────────────
+function computeSkillDecay(repos) {
+  const lastUsed = {};
+  repos.forEach((r) => {
+    if (r.language) {
+      const ts = new Date(r.updated_at).getTime();
+      if (!lastUsed[r.language] || ts > lastUsed[r.language]) lastUsed[r.language] = ts;
+    }
+  });
+  const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
+  return Object.entries(lastUsed)
+    .map(([language, ts]) => ({
+      language,
+      last_used: new Date(ts).toISOString().slice(0, 10),
+      months_since: Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24 * 30)),
+      decayed: (Date.now() - ts) > ONE_YEAR,
+    }))
+    .sort((a, b) => b.months_since - a.months_since);
+}
+
+// ── Resume generator ───────────────────────────────────────────────────────
+app.post("/api/generate-resume", async (req, res) => {
+  try {
+    const { username, context } = req.body;
+    if (!username) return res.status(400).json({ error: "username required" });
+
+    const realProjects = (context.project_detection?.real_projects || []).slice(0, 6);
+    const prompt = `Generate a professional developer resume/portfolio for GitHub user ${username}.
+
+Profile: ${context.name || username} | Bio: ${context.bio || "None"} | Location: ${context.location || "Not specified"}
+Skills: ${(context.top_skills || []).join(", ")}
+Archetype: ${context.archetype?.type} — ${context.archetype?.description}
+DNA Scores: Consistency ${context.dna_scores?.commit_consistency}/100, Complexity ${context.dna_scores?.project_complexity}/100, Docs ${context.dna_scores?.documentation_quality}/100, Collab ${context.dna_scores?.collaboration_score}/100
+Role Fit: Frontend ${context.role_fit?.frontend}%, Backend ${context.role_fit?.backend}%, DevOps ${context.role_fit?.devops}%, AI/ML ${context.role_fit?.ai_ml}%
+Real Projects: ${realProjects.map(p => p.name).join(", ") || "None identified"}
+Repos: ${context.public_repos} | Followers: ${context.followers}
+Growth: ${context.growth_narrative || "N/A"}
+
+Respond ONLY with valid JSON matching this exact structure:
+{
+  "headline": "1 punchy professional headline (e.g. 'Full-Stack Engineer specializing in React & Node.js')",
+  "summary": "3-4 sentence professional summary written in first person",
+  "skills": {
+    "primary": ["top 4-5 languages/frameworks they know well"],
+    "secondary": ["3-4 tools, platforms or concepts they use"],
+    "learning": ["1-2 skills they appear to be exploring"]
+  },
+  "projects": [
+    { "name": "project name", "description": "1-2 sentence impact-focused description", "tech": ["t1","t2"], "highlight": "key achievement or metric" }
+  ],
+  "strengths": ["strength1","strength2","strength3"],
+  "suggested_roles": ["role1","role2","role3"],
+  "certifications_to_pursue": ["cert1","cert2"],
+  "github_stats_summary": "1 sentence summarizing their GitHub presence"
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 1200);
+    res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Job description readiness / countdown ─────────────────────────────────
+app.post("/api/jd-readiness", async (req, res) => {
+  try {
+    const { username, jobDescription, context } = req.body;
+    if (!username || !jobDescription) return res.status(400).json({ error: "username and jobDescription required" });
+
+    // Truncate JD to avoid blowing token budget
+    const jd = jobDescription.trim().slice(0, 2500);
+
+    const prompt = `You are a technical career coach. Evaluate how ready GitHub developer ${username} is for the following job.
+
+Developer profile:
+- Skills: ${(context.top_skills || []).join(", ")}
+- Archetype: ${context.archetype?.type}
+- Role Fit: Frontend ${context.role_fit?.frontend}%, Backend ${context.role_fit?.backend}%, DevOps ${context.role_fit?.devops}%, AI/ML ${context.role_fit?.ai_ml}%
+- Known gaps: ${(context.gap_analysis || []).map(g => g.skill).join(", ")}
+- Interview readiness overall: ${context.interview_readiness?.overall_score || "N/A"}/100
+
+Job Description:
+${jd}
+
+Respond ONLY with valid JSON:
+{
+  "gap_score": <integer 0-100, where 100 = perfectly ready, 0 = not ready at all>,
+  "verdict": "1-2 sentence honest assessment",
+  "matched_skills": ["skill that matches JD requirement"],
+  "missing_skills": [{"skill": "name", "importance": "critical|important|nice-to-have", "estimated_weeks": <integer>}],
+  "weekly_plan": [
+    {"week": 1, "goal": "short goal", "tasks": ["task1","task2"]},
+    {"week": 2, "goal": "short goal", "tasks": ["task1","task2"]},
+    {"week": 3, "goal": "short goal", "tasks": ["task1","task2"]},
+    {"week": 4, "goal": "short goal", "tasks": ["task1","task2"]}
+  ],
+  "total_weeks_to_ready": <integer>,
+  "quick_wins": ["thing they can do this week to immediately strengthen application"]
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 1500);
+    res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── LinkedIn bio / elevator pitch generator ────────────────────────────────
+app.post("/api/linkedin-bio", async (req, res) => {
+  try {
+    const { username, context, tone } = req.body;
+    if (!username) return res.status(400).json({ error: "username required" });
+
+    const toneLabel = tone || "professional";
+    const prompt = `Generate LinkedIn profile copy and an elevator pitch for GitHub developer ${username}.
+Tone: ${toneLabel}
+
+Profile data:
+- Name: ${context.name || username}
+- Bio: ${context.bio || "None"}
+- Top skills: ${(context.top_skills || []).join(", ")}
+- Archetype: ${context.archetype?.type} — ${context.archetype?.description}
+- Role Fit: Frontend ${context.role_fit?.frontend}%, Backend ${context.role_fit?.backend}%, DevOps ${context.role_fit?.devops}%, AI/ML ${context.role_fit?.ai_ml}%
+- Repos: ${context.public_repos} | Followers: ${context.followers}
+- Recruiter summary: ${context.recruiter_summary || "N/A"}
+- Growth: ${context.growth_narrative || "N/A"}
+
+Respond ONLY with valid JSON:
+{
+  "headline": "LinkedIn headline (max 220 chars, punchy, keyword-rich)",
+  "linkedin_about": "LinkedIn About section (300-400 words, ${toneLabel} tone, first person, includes key skills and achievements, ends with a call to action)",
+  "elevator_pitch": "30-second spoken elevator pitch (80-100 words, natural conversational language)",
+  "short_pitch": "1-sentence Twitter/X bio version (max 160 chars)",
+  "keywords": ["keyword1","keyword2","keyword3","keyword4","keyword5"]
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 1000);
+    res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PR Review Simulator ────────────────────────────────────────────────────
+app.post("/api/pr-review", async (req, res) => {
+  try {
+    const { username, diff, prTitle } = req.body;
+    if (!diff) return res.status(400).json({ error: "diff is required" });
+
+    // Truncate diff to stay within token budget
+    const truncatedDiff = diff.trim().slice(0, 3500);
+
+    const prompt = `You are a senior software engineer doing a thorough code review. Review this pull request diff as if you are a senior reviewer at a top tech company. Be specific, constructive, and reference actual lines/patterns from the diff.
+
+Developer: ${username || "unknown"}
+PR Title: ${prTitle || "Untitled PR"}
+
+Diff:
+${truncatedDiff}
+
+Respond ONLY with valid JSON:
+{
+  "overall_verdict": "approved|changes_requested|needs_discussion",
+  "score": <integer 0-100, where 100 = production-perfect code>,
+  "summary": "2-3 sentence high-level review summary",
+  "comments": [
+    {
+      "type": "bug|security|performance|style|suggestion|praise",
+      "severity": "critical|major|minor|nitpick",
+      "location": "file or function name if identifiable, else 'general'",
+      "comment": "specific observation about the code",
+      "suggestion": "concrete improvement suggestion"
+    }
+  ],
+  "positives": ["thing done well 1","thing done well 2"],
+  "must_fix": ["critical issue 1 if any"],
+  "learning_resources": [{"topic": "topic", "resource": "specific resource or search query"}]
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 1800);
+    res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GitHub Twin Finder ────────────────────────────────────────────────────
+// A curated pool of well-known public developers used for similarity matching.
+// The AI compares the subject's DNA profile against this pool and picks the
+// closest matches, then generates a similarity explanation.
+const TWIN_POOL = [
+  "torvalds","gvanrossum","dhh","sindresorhus","addyosmani","tj","yyx990803",
+  "antfu","nicolo-ribaudo","wesbos","kentcdodds","paulirish","thepracticaldev",
+  "mxcl","mattdesl","Rich-Harris","sebmck","ry","substack","isaacs",
+  "jashkenas","fat","mdo","jeresig","brendaneich","creationix","feross",
+  "rvagg","dominictarr","tj","expressjs","vuejs","facebook","google",
+  "microsoft","vercel","netlify","supabase","prisma","shadcn",
+];
+
+app.post("/api/twin-finder", async (req, res) => {
+  try {
+    const { username, context } = req.body;
+    if (!username) return res.status(400).json({ error: "username required" });
+
+    // Pick a random diverse subset from the pool to keep token budget sane
+    const poolSample = [...TWIN_POOL]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20)
+      .join(", ");
+
+    const prompt = `You are DevDNA's GitHub Twin Finder. Your job is to find the most similar real GitHub developers to the subject based on their coding DNA.
+
+Subject: ${username}
+- Top skills: ${(context.top_skills || []).join(", ")}
+- Archetype: ${context.archetype?.type} — ${context.archetype?.description}
+- DNA: Consistency ${context.dna_scores?.commit_consistency}/100, Diversity ${context.dna_scores?.language_diversity}/100, Complexity ${context.dna_scores?.project_complexity}/100, Docs ${context.dna_scores?.documentation_quality}/100, Collab ${context.dna_scores?.collaboration_score}/100
+- Role fit: Frontend ${context.role_fit?.frontend}%, Backend ${context.role_fit?.backend}%, DevOps ${context.role_fit?.devops}%, AI/ML ${context.role_fit?.ai_ml}%
+- Repos: ${context.public_repos} | Followers: ${context.followers}
+- Growth: ${context.growth_narrative || "N/A"}
+
+Pool to match against (pick the best 3): ${poolSample}
+
+For each match, explain WHY they are similar based on coding style, language choices, project types, or philosophy. Be specific and insightful.
+
+Respond ONLY with valid JSON:
+{
+  "twins": [
+    {
+      "username": "github_username_from_pool",
+      "similarity_score": <integer 60-99>,
+      "match_reason": "2-3 sentences explaining the specific similarities in coding style, languages, and philosophy",
+      "shared_traits": ["trait1", "trait2", "trait3"],
+      "key_difference": "1 sentence on the main thing that sets them apart"
+    }
+  ],
+  "twin_summary": "1-2 sentence fun summary of what kind of developer ${username} is, referencing the matches"
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 900);
+    res.json(parseJSON(raw));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Hackathon Squad Builder ───────────────────────────────────────────────
+app.post("/api/squad-builder", async (req, res) => {
+  try {
+    const { usernames, hackathonTheme } = req.body;
+    if (!usernames || !Array.isArray(usernames) || usernames.length < 2) {
+      return res.status(400).json({ error: "At least 2 usernames required" });
+    }
+    if (usernames.length > 6) {
+      return res.status(400).json({ error: "Maximum 6 members" });
+    }
+
+    // Fetch all profiles in parallel
+    const profiles = await Promise.all(
+      usernames.map(async (u) => {
+        try {
+          const [user, repos] = await Promise.all([fetchUser(u), fetchRepos(u)]);
+          const topSkills = computeTopSkills(repos);
+          const roleFit = computeRoleFit(repos, topSkills);
+          const dna = computeDNAScores(repos);
+          return {
+            username: u,
+            name: user.name || u,
+            bio: user.bio || "",
+            top_skills: topSkills,
+            role_fit: roleFit,
+            dna_scores: dna,
+            public_repos: user.public_repos,
+            followers: user.followers,
+          };
+        } catch {
+          return { username: u, error: true, top_skills: [], role_fit: {}, dna_scores: {} };
+        }
+      })
+    );
+
+    const validProfiles = profiles.filter((p) => !p.error);
+    if (validProfiles.length < 2) {
+      return res.status(400).json({ error: "Could not fetch enough valid profiles" });
+    }
+
+    const profileSummary = validProfiles.map((p) =>
+      `${p.username}: skills=[${p.top_skills.join(", ")}] fit=[FE:${p.role_fit.frontend}% BE:${p.role_fit.backend}% DO:${p.role_fit.devops}% AI:${p.role_fit.ai_ml}%] DNA=[consistency:${p.dna_scores.commit_consistency} complexity:${p.dna_scores.project_complexity} collab:${p.dna_scores.collaboration_score}]`
+    ).join("\n");
+
+    const prompt = `You are a hackathon team strategist. Analyze these developers and build the optimal squad composition.
+
+Hackathon theme: ${hackathonTheme || "General / Full-Stack"}
+
+Team members:
+${profileSummary}
+
+Respond ONLY with valid JSON:
+{
+  "squad_name": "a creative team name that reflects the collective vibe",
+  "squad_score": <integer 0-100, overall squad strength>,
+  "squad_verdict": "2-3 sentence assessment of this team's potential",
+  "roles": [
+    {
+      "username": "github_username",
+      "assigned_role": "e.g. Frontend Lead / Backend Architect / AI Engineer / DevOps / Product / Fullstack",
+      "why": "1-2 sentences on why this person owns this role",
+      "superpower": "their single biggest strength for this hackathon",
+      "watch_out": "1 potential risk or blind spot"
+    }
+  ],
+  "team_strengths": ["strength1", "strength2", "strength3"],
+  "team_gaps": ["gap1", "gap2"],
+  "win_strategy": "2-3 sentence tactical advice for how this team should approach the hackathon to win",
+  "suggested_stack": ["tech1", "tech2", "tech3", "tech4"],
+  "chemistry_score": <integer 0-100, how well these people likely collaborate>,
+  "wildcard_tip": "1 unexpected insight or contrarian strategy for this specific team"
+}`;
+
+    const raw = await aiCall([{ role: "user", content: prompt }], 1400);
+    const result = parseJSON(raw);
+
+    // Attach avatar URLs to roles for the frontend
+    result.profiles = validProfiles.map((p) => ({
+      username: p.username,
+      name: p.name,
+      top_skills: p.top_skills,
+      role_fit: p.role_fit,
+    }));
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

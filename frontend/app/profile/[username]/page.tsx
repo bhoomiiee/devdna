@@ -4,20 +4,27 @@ import { useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
 import dynamic from "next/dynamic";
 
-const ArchetypeCard      = dynamic(() => import("@/components/ArchetypeCard"), { ssr: false });
-const DNAFingerprint     = dynamic(() => import("@/components/DNAFingerprint"), { ssr: false });
-const GrowthTimeline     = dynamic<{ narrative: string; milestones: Milestone[] }>(() => import("@/components/GrowthTimeline"), { ssr: false });
-const GapAnalysis        = dynamic<{ gaps: GapItem[] }>(() => import("@/components/GapAnalysis"), { ssr: false });
-const DevCard            = dynamic<{ data: ProfileData; username: string }>(() => import("@/components/DevCard"), { ssr: false });
-const RecruiterView      = dynamic<{ data: ProfileData; username: string }>(() => import("@/components/RecruiterView"), { ssr: false });
-const LanguageChart      = dynamic<{ repos: { language: string | null }[] }>(() => import("@/components/LanguageChart"), { ssr: false });
-const CommitHeatmap      = dynamic<{ events: { date: string; count: number }[] }>(() => import("@/components/CommitHeatmap"), { ssr: false });
-const AIChat             = dynamic<{ username: string; data: ProfileData }>(() => import("@/components/AIChat"), { ssr: false });
-const RoleSimulation     = dynamic<{ username: string; data: ProfileData }>(() => import("@/components/RoleSimulation"), { ssr: false });
-const ProjectDetection   = dynamic<{ data: any }>(() => import("@/components/ProjectDetection"), { ssr: false });
-const OpenSourceMatcher  = dynamic<{ opportunities: any[] }>(() => import("@/components/OpenSourceMatcher"), { ssr: false });
-const InterviewReadiness = dynamic<{ data: any }>(() => import("@/components/InterviewReadiness"), { ssr: false });
-const ExplainRepo        = dynamic<{ username: string; repos: any[] }>(() => import("@/components/ExplainRepo"), { ssr: false });
+const ArchetypeCard        = dynamic(() => import("@/components/ArchetypeCard"), { ssr: false });
+const DNAFingerprint       = dynamic(() => import("@/components/DNAFingerprint"), { ssr: false });
+const GrowthTimeline       = dynamic<{ narrative: string; milestones: Milestone[] }>(() => import("@/components/GrowthTimeline"), { ssr: false });
+const GapAnalysis          = dynamic<{ gaps: GapItem[] }>(() => import("@/components/GapAnalysis"), { ssr: false });
+const DevCard              = dynamic<{ data: ProfileData; username: string }>(() => import("@/components/DevCard"), { ssr: false });
+const RecruiterView        = dynamic<{ data: ProfileData; username: string }>(() => import("@/components/RecruiterView"), { ssr: false });
+const LanguageChart        = dynamic<{ repos: { language: string | null }[] }>(() => import("@/components/LanguageChart"), { ssr: false });
+const CommitHeatmap        = dynamic<{ events: { date: string; count: number }[] }>(() => import("@/components/CommitHeatmap"), { ssr: false });
+const AIChat               = dynamic<{ username: string; data: ProfileData }>(() => import("@/components/AIChat"), { ssr: false });
+const RoleSimulation       = dynamic<{ username: string; data: ProfileData }>(() => import("@/components/RoleSimulation"), { ssr: false });
+const ProjectDetection     = dynamic<{ data: any }>(() => import("@/components/ProjectDetection"), { ssr: false });
+const OpenSourceMatcher    = dynamic<{ opportunities: any[] }>(() => import("@/components/OpenSourceMatcher"), { ssr: false });
+const InterviewReadiness   = dynamic<{ data: any }>(() => import("@/components/InterviewReadiness"), { ssr: false });
+const ExplainRepo          = dynamic<{ username: string; repos: any[] }>(() => import("@/components/ExplainRepo"), { ssr: false });
+const ResumeGenerator      = dynamic<{ username: string; data: any }>(() => import("@/components/ResumeGenerator"), { ssr: false });
+const ReadinessCountdown   = dynamic<{ username: string; data: any }>(() => import("@/components/ReadinessCountdown"), { ssr: false });
+const SkillDecayTracker    = dynamic<{ skillDecay: SkillDecayItem[] }>(() => import("@/components/SkillDecayTracker"), { ssr: false });
+const LinkedInBio          = dynamic<{ username: string; data: any }>(() => import("@/components/LinkedInBio"), { ssr: false });
+const PRReviewSimulator    = dynamic<{ username: string }>(() => import("@/components/PRReviewSimulator"), { ssr: false });
+const GitHubTwinFinder     = dynamic<{ username: string; data: any }>(() => import("@/components/GitHubTwinFinder"), { ssr: false });
+const HackathonSquadBuilder = dynamic<{ defaultUsername?: string }>(() => import("@/components/HackathonSquadBuilder"), { ssr: false });
 
 interface ProfileData {
   avatar_url: string; name: string; bio: string; location: string;
@@ -29,18 +36,21 @@ interface ProfileData {
   interview_readiness: any;
   opportunities: any[];
   commit_events: { date: string; count: number }[];
+  skill_decay: SkillDecayItem[];
   repos: { name: string; language: string | null; stars: number; forks: number; description: string; url: string }[];
 }
 interface ArchetypeData { type: string; emoji: string; description: string; }
 interface DNAScores { commit_consistency: number; language_diversity: number; project_complexity: number; documentation_quality: number; collaboration_score: number; }
 interface Milestone { year: number; tech: string; repos: number; description: string; }
 interface GapItem { skill: string; suggestion: string; resources: string[]; }
+interface SkillDecayItem { language: string; last_used: string; months_since: number; decayed: boolean; }
 
 const TABS = [
   { id: "overview",      label: "🧬 Overview" },
   { id: "intelligence",  label: "🔬 Intelligence" },
   { id: "career",        label: "🎯 Career" },
   { id: "ai",            label: "🤖 AI Tools" },
+  { id: "squad",         label: "🏆 Squad" },
   { id: "share",         label: "🪪 Share" },
 ];
 
@@ -122,6 +132,7 @@ export default function ProfilePage() {
             ))}
           </div>
 
+          {/* ── Overview ─────────────────────────────────────────────── */}
           {activeTab === "overview" && (
             <div className="grid gap-6">
               <div className="grid md:grid-cols-2 gap-6">
@@ -151,31 +162,50 @@ export default function ProfilePage() {
             </div>
           )}
 
+          {/* ── Intelligence ─────────────────────────────────────────── */}
           {activeTab === "intelligence" && (
             <div className="grid gap-6">
               <ProjectDetection data={data.project_detection} />
               <InterviewReadiness data={data.interview_readiness} />
+              <SkillDecayTracker skillDecay={data.skill_decay || []} />
               <GapAnalysis gaps={data.gap_analysis} />
             </div>
           )}
 
+          {/* ── Career ───────────────────────────────────────────────── */}
           {activeTab === "career" && (
             <div className="grid gap-6">
+              <ReadinessCountdown username={username} data={data} />
               <RoleSimulation username={username} data={data} />
-              {data.growth_narrative && data.milestones && <GrowthTimeline narrative={data.growth_narrative} milestones={data.milestones} />}
+              {data.growth_narrative && data.milestones && (
+                <GrowthTimeline narrative={data.growth_narrative} milestones={data.milestones} />
+              )}
               <OpenSourceMatcher opportunities={data.opportunities || []} />
             </div>
           )}
 
+          {/* ── AI Tools ─────────────────────────────────────────────── */}
           {activeTab === "ai" && (
             <div className="grid gap-6">
+              <GitHubTwinFinder username={username} data={data} />
+              <PRReviewSimulator username={username} />
               <AIChat username={username} data={data} />
               <ExplainRepo username={username} repos={data.repos || []} />
             </div>
           )}
 
+          {/* ── Squad ────────────────────────────────────────────────── */}
+          {activeTab === "squad" && (
+            <div className="grid gap-6">
+              <HackathonSquadBuilder defaultUsername={username} />
+            </div>
+          )}
+
+          {/* ── Share ────────────────────────────────────────────────── */}
           {activeTab === "share" && (
             <div className="grid gap-6">
+              <ResumeGenerator username={username} data={data} />
+              <LinkedInBio username={username} data={data} />
               <DevCard data={data} username={username} />
               <div className="bg-card rounded-2xl p-6 border border-white/5">
                 <h3 className="text-slate-400 text-sm mb-4 uppercase tracking-widest">Share Profile</h3>
