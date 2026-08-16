@@ -12,10 +12,12 @@ services:
       - key: PORT
         value: 4000
       - key: GROQ_API_KEY
-        sync: false  # set manually in Render dashboard
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: GITHUB_TOKEN
+        sync: false
+      - key: JWT_SECRET
         sync: false
       - key: REDIS_URL
         fromService:
@@ -34,6 +36,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: PORT
+        value: 3000
       - key: NEXT_PUBLIC_API_URL
         fromService:
           name: devdna-backend
@@ -46,4 +52,4 @@ services:
     name: devdna-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: []  # allow all — fine for internal service communication
+    ipAllowList: []
